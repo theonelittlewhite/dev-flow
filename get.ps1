@@ -17,8 +17,12 @@ Write-Host "下载 $($asset.name) ..."
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing
 Write-Host "解压到 $tmp ..."
 Expand-Archive -Path $zip -DestinationPath $tmp -Force
-$kit = Get-ChildItem -Path $tmp -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'install.mjs') } | Select-Object -First 1
-if (-not $kit) { throw "解压后未找到 install.mjs" }
+# v0.0.2 的 zip 根目录直接含 install.mjs；旧包可能是单层目录，两种都兼容
+$kitRoot = $tmp
+if (-not (Test-Path (Join-Path $kitRoot 'install.mjs'))) {
+  $kitRoot = (Get-ChildItem -Path $tmp -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'install.mjs') } | Select-Object -First 1).FullName
+}
+if (-not $kitRoot) { throw "解压后未找到 install.mjs" }
 Write-Host "安装（旧版会自动备份）..."
-node (Join-Path $kit.FullName 'install.mjs') --install --force
+node (Join-Path $kitRoot 'install.mjs') --install --force
 Write-Host "完成。验证：node ~/.zcode/skills/dev-flow-setup/scripts/setup.mjs --verify"
