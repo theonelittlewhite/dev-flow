@@ -1,0 +1,60 @@
+{
+  "name": "dev-flow-kit",
+  "version": "0.0.1",
+  "description": "Portable dev-flow kit for AI coding agents: S/M/L tiers, a six-stage loop, triage side-path, and a multi-session conductor protocol. ZCode-ready; upstream skills vendored (MIT).",
+  "type": "module",
+  "bin": {
+    "dev-flow": "./install.mjs"
+  },
+  "files": [
+    "dev-flow/",
+    "dev-flow-grill-with-docs/",
+    "dev-flow-handoff/",
+    "dev-flow-retro/",
+    "dev-flow-to-questionnaire/",
+    "dev-flow-to-spec/",
+    "dev-flow-to-tickets/",
+    "dev-flow-triage/",
+    "dev-flow-wayfinder/",
+    "dev-flow-setup/",
+    "vendor/upstream/",
+    "tests/",
+    "tools/",
+    "install.mjs",
+    "pack.mjs",
+    "kit.json",
+    "get.sh",
+    "get.ps1",
+    "README.md",
+    "INSTALL.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:maintainer": "node --test dev-flow/IMPLEMENTATION/tests/*.test.mjs",
+    "test:all": "npm test && npm run test:maintainer"
+  },
+  "keywords": [
+    "dev-flow",
+    "workflow",
+    "ai-agent",
+    "coding-agent",
+    "zcode",
+    "tickets",
+    "triage",
+    "spec-driven"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theonelittlewhite/dev-flow.git"
+  },
+  "homepage": "https://github.com/theonelittlewhite/dev-flow",
+  "bugs": {
+    "url": "https://github.com/theonelittlewhite/dev-flow/issues"
+  }
+}

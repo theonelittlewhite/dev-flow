@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "project": "my-project",
+  "docs": {
+    "glossary": "docs/dev-guide/glossary.md",
+    "design": "docs/design",
+    "implemented": "docs/implemented"
+  },
+  "ledger": {
+    "mode": "manual",
+    "add": null,
+    "index": null,
+    "pitfalls": "docs/issues/pitfalls.md",
+    "deferred": "docs/issues/deferred.md"
+  },
+  "changelog": {
+    "mode": "none",
+    "dir": "changelog"
+  },
+  "finishGate": {
+    "command": null,
+    "required": false
+  },
+  "taskchron": {
+    "mode": "auto"
+  },
+  "slots": {
+    "enabled": false,
+    "claim": null,
+    "done": null,
+    "dir": null
+  },
+  "audit": {
+    "designDocGlobs": ["docs/design/**/*.yaml", "docs/design/**/*.yml"],
+    "allowNonCodeGlobs": []
+  }
+}

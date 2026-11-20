@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "feature": "<feature-id>",
+  "title": "<功能名>",
+  "tier": "M",
+  "stage": "requirements",
+  "status": "in-progress",
+  "currentTicket": null,
+  "nextAction": "和用户聊需求，产出 spec.md",
+  "artifacts": {
+    "spec": "specs/<feature-id>/spec.md",
+    "design": "specs/<feature-id>/design.md",
+    "issues": "specs/<feature-id>/issues",
+    "tasks": "specs/<feature-id>/tasks.md",
+    "traceability": "specs/<feature-id>/traceability.md",
+    "acceptance": "specs/<feature-id>/acceptance.md"
+  },
+  "gates": {
+    "designApproved": false,
+    "ticketsReviewed": false,
+    "finalReviewed": false,
+    "userAccepted": false
+  },
+  "affectedModules": [],
+  "dependsOnFeatures": [],
+  "taskchron": {
+    "parentId": null,
+    "epics": {},
+    "lastSyncedAt": null
+  },
+  "history": [
+    {
+      "at": "<ISO 时间>",
+      "stage": "init",
+      "note": "创建流程"
+    }
+  ],
+  "updatedAt": "<ISO 时间>"
+}
