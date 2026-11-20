@@ -18,6 +18,7 @@ ASK: <NEED-DECISION 时一行问题；否则 ->
 规则回顾（详见 `references/09-conductor.md` §3）：
 
 - 唯一通道：evidence 落盘并提交是**正路**（原「手递降级」已转正，2026-11-20 W-04 统一改版）；不再尝试 `SendToSession`，报告没落盘才算失败，不因消息发送失败记工人失职。
+- **retro 独立成文件**：完工复盘是单独的 `evidence/<ticket>-retro.md`（先调 `dev-flow-retro` 单票模式，文件头 `SKILL:` 行，模板 `templates/ticket-retro.md`），与七行报告块同批提交；**七行块格式、七键与收账语义不变**，`report-ledger.mjs` 不读 retro；缺 retro 或缺 `SKILL:` 行不阻塞七行报告收账，路由按 09 §4 要求补做并三路分诊。
 - 重复投递：同一工人重写报告文件/多次投递，路由只取**最后一份完整报告块**；`report-ledger.mjs` 按提交号幂等去重，重复只记一次 duplicate。
 - 进度不转发：路由只转 `NEED-DECISION` 与收账一行给用户。
 - 报告落 evidence 后由监视器唤醒路由收账（后台 `scripts/watch-reports.mjs` 盯 evidence，新报告稳定即唤醒）；路由每轮开头仍主动扫 evidence 兜底——监视器 + 每轮开头扫，双保险（机器休眠/监视器漏跑也不丢报告）。

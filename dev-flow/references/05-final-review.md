@@ -56,6 +56,7 @@
 - **契约/端口消费者**：设计定义的 Port/Protocol 是否有生产代码消费者（零消费者＝死契约，接线或已登记偏差）；适配器私有结构有没有僭越成事实契约（私有字典/字段成了实际标准而契约层空转）。
 - 性能/内存/阻塞是否符合设计预算？
 - 安全/信任边界（IPC/文件 IO/插件/更新链）有没有问题？
+- **能力/权限影响（硬项）**：diff 出现设置读写（`getSetting`/`setSetting` 类）、`plugin-sql`/`fs`/`http`/`dialog`/`shell` 等插件调用、`invoke` 自定义命令、跨窗口事件/数据访问时，必须核对**目标窗口/进程**的 capability/permission 清单（Tauri `src-tauri/capabilities/*.json`、Capacitor 插件配置、Electron preload allowlist），并在本路报告写一行「**能力影响：已核对 <文件清单>（结论）/ 无需变更（理由）**」——缺行视为该路评审不完整（快查表见 `references/04-implement.md`；核对输入＝派工令「文件地盘→关联只读检查」列出的文件，无派工令的形态 A/C 直接查仓库 capability/manifest 配置）。
 - 输出：`blocking` / `suggestion`。
 
 ### 评审 3：测试与回归
@@ -66,6 +67,7 @@
 - 手抄清单/双录型「测试」只证明抄件一致（同义反复），与评审 1「覆盖类台账机器对账」同源，须按该条口径处理。
 - 旧功能/旧数据有没有回归？
 - 接线（入口/IPC/UI/资源）有没有验证？
+- **能力面改动的测试证明力（硬项）**：新增窗口/进程/权限/数据路径时，必须有真实语境证据——真实窗口标签与真实能力集下的 E2E 或能力配置断言（见 `references/11-testing.md` 真实上下文测试：硬底线至少一条，通用做法两条全做）；主窗口/测试窗口的 E2E 不能替代，单测全绿不构成能力面改动的放行证据；真实语境证据为零＝`blocking`，只落地一条而未记录另一条不可行的理由同样 `blocking`。
 - 输出：`blocking` / `suggestion`。
 
 ## 裁判
@@ -95,6 +97,7 @@
 - `issue-audit` 全绿（`--phase final-review`，退出码 0）。存量历史红（如 git 历史不可改的自签收旧案）只能经独立评审/档案会话在工单「历史」段写 `issue-audit 豁免：…（独立重签：<报告路径>）` 降级为 NOTE：**必须带机器可识别签名 + 仓库内可打开的报告路径**；工人自写豁免、无签名、路径不存在一律判红，不降级。豁免清单须列入 `review-final.md` 的「issue-audit 豁免清单」节供用户过目。
 - 状态同步三表一致：issue 状态行 ↔ `tasks.md` 索引行 ↔ `traceability.md` AC/决策行；`done` 工单不得对应 `planned/⬜`。
 - `verification-before-completion` 的证据齐全。
+- 能力面硬项：触及能力面（设置读写/插件调用/自定义命令/跨窗口事件或数据访问）的评审，评审 2/3 缺「能力影响」行、或评审 3 缺真实上下文测试证据（真实窗口标签与真实能力集下的 E2E 或能力配置断言，硬底线至少一条、默认两条全做，见 `references/11-testing.md` §9）→ 门禁不过。
 - 校准记录在案且召回达标（或已声明降级）。
 - 更新状态：`gates.finalReviewed=true`，`stage=acceptance`。
 

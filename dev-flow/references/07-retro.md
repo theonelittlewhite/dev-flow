@@ -4,6 +4,19 @@
 
 用户验收不通过时，不是「再修一下」就完事，而是找出**哪个环节漏了**，把「漏」变成一个新增的检查/模板字段/评审维度，让同类问题不再发生。
 
+## 两种复盘（先分清再开工）
+
+| | 单票 retro（每单完工） | 功能 retro（本册正题：验收失败 / 阶段 7） |
+| --- | --- | --- |
+| 触发 | 每张工单销单收尾 | 用户验收不通过 / 阶段 7 复盘 |
+| 技能 | `dev-flow-retro` **单票模式** | `dev-flow-retro` **功能级模式** |
+| 输出 | `specs/<feature>/evidence/<ticket>-retro.md`，文件头 `SKILL: dev-flow-retro` 行（模板 `templates/ticket-retro.md`） | `specs/<feature>/process-upgrade.md`（模板 `templates/process-upgrade.md`） |
+| 后续 | 路由收账校验 `SKILL:` 行并三路分诊（`references/09-conductor.md` §3/§4）；**不阻塞**七行报告收账 | 升级项用户批准后落地，重跑受影响阶段 |
+
+两种模式都必须**先调 `dev-flow-retro` 再写文件**——原版 `retro` 是 `disable-model-invocation: true`，工人不能自动调；未调技能硬写的 retro 视为未完成。单票 retro 正文 ≤50 行，建议按三分类（项目级 / dev-flow 级 / 通用经验卡候选）；功能 retro 按 §复盘步骤 走五问定位与升级项。
+
+三分类里的通用经验卡候选按**项目配置**走：索引路径取项目 `.dev-flow.json` 的 `experience.index`（解析落地前视为未配置）或项目 AGENTS/文档指针，技能不写死「开发随记」或任何具体知识库路径；未配置或 `experience.mode=off` 时**跳过共享卡分诊**，候选只写项目级 `docs/dev-guide/experience.md`，不报错（分诊细则见 `references/09-conductor.md` §4）。
+
 ## 输入
 
 - `acceptance-result.md`（失败现象、步骤、期望 vs 实际）
@@ -14,7 +27,7 @@
 
 | 情况 | 技能 | 说明 |
 | --- | --- | --- |
-| 复盘 | `dev-flow-retro` | 副本：写 `specs/<feature>/process-upgrade.md`；不直接改 AGENTS/规范/技能，改流程需用户批 |
+| 复盘 | `dev-flow-retro` | 副本双模式：功能级写 `specs/<feature>/process-upgrade.md`，单票模式写 `evidence/<ticket>-retro.md`（文件头 `SKILL:` 行）；不直接改 AGENTS/规范/技能，改流程需用户批 |
 | 需要定位 bug | `diagnosing-bugs` | 先造红灯反馈回路，再根因 |
 | 需要改流程 | 本技能 + `writing-skills`（可选，须用户批） | 把机械问题变成检查，判断题变成规范 |
 
@@ -43,7 +56,7 @@
 
 ## 产出
 
-`specs/<feature>/process-upgrade.md`（用 `templates/process-upgrade.md`）：
+功能级模式产物：`specs/<feature>/process-upgrade.md`（用 `templates/process-upgrade.md`）：
 
 ```md
 # 流程升级：<功能名>

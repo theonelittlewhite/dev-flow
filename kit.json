@@ -1,6 +1,6 @@
 {
   "name": "dev-flow-kit",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "minNode": 20,
   "host": "ZCode",
   "upstreamSnapshot": "2026-11-17",

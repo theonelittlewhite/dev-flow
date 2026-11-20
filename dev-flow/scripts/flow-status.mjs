@@ -247,7 +247,7 @@ function scanConflicts(root, state) {
   return out;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(args.root);
   let statePath;
@@ -312,9 +312,41 @@ function main() {
   for (const c of conflicts) warnings.push(`模块重叠：与功能 ${c.feature}（${c.stage}）重叠 [${c.modules.join('、')}]，先排序/协调再动工`);
 
   const models = readModels(root);
+  // slot-fabric T-05：环境摘要——从就绪回执计算（D22：不存 state，只读展示，不参与门禁判定）；
+  // poolWarm=false 时标注「预热中」（允许开工，design「配置分层与就绪回执」）。
+  // W-13：懒加载 slot/init.mjs——公开包只发技能层、不含 scripts/slot/**，顶层静态 import 会让
+  // 安装后的 flow-status 直接 ERR_MODULE_NOT_FOUND。缺模块/加载失败时跳过槽位环境检查不崩：
+  // --json 的 environment 字段按 checkEnvironment 的 fail() 同形兜底（schema 不破坏），
+  // 人类可读输出给一行「槽位模块未安装」。
+  let environment = null;
+  try {
+    const { checkEnvironment } = await import('./slot/init.mjs');
+    environment = checkEnvironment(root);
+  } catch {
+    environment = null; // 公开包形态（无 scripts/slot/**）：环境检查降级跳过，不视为错误
+  }
+  const environmentSummary = environment
+    ? {
+        ready: environment.ready,
+        reason: environment.reason,
+        detail: environment.detail,
+        projectId: environment.projectId,
+        machineId: environment.machineId,
+        poolWarm: environment.poolWarm,
+        modes: environment.modes,
+      }
+    : {
+        ready: false,
+        reason: 'SLOT_MODULE_MISSING',
+        detail: '槽位模块未安装，跳过环境检查',
+        projectId: null,
+        machineId: null,
+        poolWarm: false,
+        modes: null,
+      };
 
   if (args.json) {
-    console.log(JSON.stringify({ statePath, state, artifacts: checks, issues, conflicts, models }, null, 2));
+    console.log(JSON.stringify({ statePath, state, artifacts: checks, issues, conflicts, models, environment: environmentSummary }, null, 2));
     return;
   }
 
@@ -332,6 +364,11 @@ function main() {
   const missing = checks.filter(c => c.v && !c.exists).map(c => c.v);
   console.log(`产物：${missing.length ? '缺 ' + missing.join('、') : '已齐'}`);
   console.log(`门禁：设计${gates.designApproved ? '✓' : '✗'} 工单${gates.ticketsReviewed ? '✓' : '✗'} 完成评审${gates.finalReviewed ? '✓' : '✗'} 验收${gates.userAccepted ? '✓' : '✗'}`);
+  console.log(!environment
+    ? `环境：槽位模块未安装，跳过环境检查`
+    : environment.ready
+      ? `环境：就绪（${environment.projectId} @ ${environment.machineId}${environment.poolWarm ? '' : '，预热中'}）`
+      : `环境：未就绪（${environment.reason}：${environment.detail}）`);
   console.log(modelsLine(models.status));
   if ((state.affectedModules || []).length) console.log(`受影响模块：${state.affectedModules.join('、')}`);
   if ((state.dependsOnFeatures || []).length) console.log(`依赖功能：${state.dependsOnFeatures.join('、')}`);

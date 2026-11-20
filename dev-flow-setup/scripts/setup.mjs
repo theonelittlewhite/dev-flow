@@ -421,6 +421,61 @@ function scriptsOf(root) {
   }
 }
 
+/**
+ * slot-fabric T-05 环境探测（只读委托）：经同仓 dev-flow 技能的 dev-flow-slot doctor
+ * 探测项目/机器/回执现状。setup 自己不判回执、不写 environment——init 是新功能回执
+ * 唯一写者（design D43）；探测只回答「现在就绪吗、下一步跑什么」。
+ *
+ * 同仓定位：仓库布局 dev-flow-setup/scripts → ../dev-flow；安装布局
+ * <skills-root>/dev-flow-setup → ../dev-flow，同一条相对路径两处都成立。
+ * 测试/嵌入可用 DEV_FLOW_SKILL_ROOT 指定 dev-flow 技能根（默认按上述约定）。
+ * 探测失败一律降级为 delegated:false + 原因，绝不影响 project-init 本身的结果。
+ */
+export function probeEnvironment(root) {
+  // ../..：仓库布局 dev-flow-setup/scripts → <包根>/dev-flow；安装布局 <skills-root>/dev-flow-setup → <skills-root>/dev-flow
+  const skillRoot = process.env.DEV_FLOW_SKILL_ROOT || path.resolve(HERE, '..', '..', 'dev-flow');
+  const cli = path.join(skillRoot, 'scripts', 'dev-flow-slot.mjs');
+  if (!exists(cli)) {
+    return { delegated: false, ok: false, reason: 'dev-flow 技能不可达（环境探测跳过，不影响 project-init）' };
+  }
+  const nextCommand =
+    `node "${cli}" init --root <项目根> --project-id <id> --machine <machineId>` +
+    ' --preset <solo|multi|import-geokit> --machines <id>=<count> --ci <provider|none> --lock <service|git-ref|none>';
+  let result;
+  try {
+    result = spawnSync(process.execPath, [cli, 'doctor', '--root', root, '--json'], {
+      encoding: 'utf8',
+      timeout: 30000,
+      windowsHide: true,
+    });
+  } catch (error) {
+    return { delegated: false, ok: false, reason: `dev-flow-slot doctor 探测失败：${error.message}`, nextCommand };
+  }
+  if (result.error || result.status !== 0) {
+    return {
+      delegated: false,
+      ok: false,
+      reason: `dev-flow-slot doctor 退出非 0（${result.status ?? 'spawn 错误'}），环境探测跳过`,
+      nextCommand,
+    };
+  }
+  try {
+    const report = JSON.parse(result.stdout);
+    return {
+      delegated: true,
+      ok: report.ok === true,
+      projectId: report.project?.projectId ?? null,
+      machineId: report.machine?.machineId ?? null,
+      receiptValid: report.receipt?.valid === true,
+      reason: report.receipt?.valid ? null : report.receipt?.reason ?? 'NOT-READY',
+      statesCount: report.states?.count ?? 0,
+      nextCommand: report.ok ? null : nextCommand,
+    };
+  } catch {
+    return { delegated: false, ok: false, reason: 'dev-flow-slot doctor 输出不是合法 JSON', nextCommand };
+  }
+}
+
 export function detectProfile(root) {
   const pkgFile = path.join(root, 'package.json');
   let pkg = {};
@@ -730,40 +785,45 @@ function projectInit(opts) {
   const root = path.resolve(opts.root);
   const file = path.join(root, '.dev-flow.json');
   const profile = detectProfile(root);
-  // models 块不由 setup 生成/维护（路由维护），一致性比对忽略它，避免「只为 models 差异就要 --force」。
+  // 比对语义（按 setup 持有的键逐键比对，T-05 扩展）：
+  //   - setup 只拥有 profile 形状里的键；models（路由维护）/ environment（slot init 维护，
+  //     init 是新功能回执唯一写者）等「别人的键」不参与比对，写入时原样保留；
+  //   - profile 键在文件里缺失 = 纯增量 → 直接合并写入，不需要 --force；
+  //   - profile 键已存在且值不同 = 冲突 → 不加 --force 拒绝（防误覆盖）。
   const modelsOf = existing => modelsStatus(normalizeModels(isObject(existing) ? existing.models : null));
+  // slot-fabric T-05：环境探测委托（spec「探测、项目初始化」）——setup 不写 environment/回执，
+  // 只经同仓 dev-flow 技能的 doctor 只读探测现状并给委托命令。
+  const environment = probeEnvironment(root);
+  let existing = null;
   if (exists(file)) {
-    let existing;
     try {
       existing = readJson(file);
     } catch (error) {
       fail(`现有 ${file} 无法解析：${error.message}`);
     }
-    const { models: _ignored, ...rest } = existing;
-    if (JSON.stringify(rest) === JSON.stringify(profile)) {
-      return {
-        ok: true,
-        mode: 'project-init',
-        path: file,
-        created: false,
-        dryRun: opts.dryRun,
-        profile,
-        models: modelsOf(existing),
-      };
-    }
-    if (!opts.force) {
-      fail(`${file} 已存在且内容不同；确认覆盖请加 --force。`);
-    }
   }
-  if (!opts.dryRun) writeJson(file, profile);
+  const ownedMissingOrDiffers = Object.keys(profile).filter(
+    key => !(key in (existing ?? {})) || JSON.stringify(existing[key]) !== JSON.stringify(profile[key])
+  );
+  const conflicts = ownedMissingOrDiffers.filter(key => key in (existing ?? {}));
+  if (existing !== null && conflicts.length > 0 && !opts.force) {
+    fail(`${file} 已存在且内容不同（${conflicts.join('、')}）；确认覆盖请加 --force。`);
+  }
+  const needsWrite =
+    (existing === null || ownedMissingOrDiffers.length > 0 || conflicts.length > 0) && !opts.dryRun;
+  if (needsWrite) {
+    // 合并写入：既有键（含 models/environment/用户自定义键）一律保留，profile 键补齐/覆盖
+    writeJson(file, existing === null ? profile : { ...existing, ...profile });
+  }
   return {
     ok: true,
     mode: 'project-init',
     path: file,
-    created: !exists(file) || !opts.dryRun,
+    created: existing === null && !opts.dryRun,
     dryRun: opts.dryRun,
     profile,
-    models: modelsOf(profile.models ?? null),
+    models: modelsOf(existing),
+    environment,
   };
 }
 
@@ -820,6 +880,19 @@ function printHuman(result) {
       console.log('  ticketReview/finalReview 数组给 1 项=三路同型号、3 项=逐路指定，2 项非法）：');
       for (const line of modelsSnippet().split('\n')) console.log(`  ${line}`);
       console.log('  未配置时 dev-flow 会在对应环节停下问你，不静默用默认。');
+    }
+    // slot-fabric T-05：环境就绪回执探测（委托只读，setup 不写 environment/回执）
+    const envProbe = result.environment;
+    if (envProbe) {
+      console.log('【环境探测】（slot-fabric 就绪回执，经 dev-flow-slot doctor 委托，只读）');
+      if (!envProbe.delegated) {
+        console.log(`  跳过：${envProbe.reason}`);
+      } else {
+        console.log(
+          `  状态：${envProbe.ok ? '就绪' : '未就绪'}（项目 ${envProbe.projectId ?? '未注册'} / 机器 ${envProbe.machineId ?? '未注册'} / 回执 ${envProbe.receiptValid ? '有效' : `未生效${envProbe.reason ? `：${envProbe.reason}` : ''}`}）`
+        );
+        if (!envProbe.ok && envProbe.nextCommand) console.log(`  下一步：${envProbe.nextCommand}`);
+      }
     }
   }
 }

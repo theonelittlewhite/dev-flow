@@ -46,13 +46,13 @@
 ```
 1. 单号：T-XX（对应 issues/T-XX.md 契约全文）
 2. 目标与验收：可机检的完成判据（测试/门禁/清单）
-3. 文件地盘：允许路径 + 禁入清单（共享文件/并行工人地盘/旧线/版本文件）
+3. 文件地盘：允许路径 + 禁入清单（共享文件/并行工人地盘/旧线/版本文件）+ **必填子项「关联只读检查」**——列 capability/manifest/权限配置文件（即使禁改也要列出，供评审「能力影响」行核对，见 04/05；无则写「无需变更（理由）」）。该子项属于文件地盘的必填内容，不是可选项；`check-order.mjs` 对缺失给非阻断警告（六字段语义不变）
 4. 基线 + 验证命令：当前测试基线数、run-low 命令、gate:remote 用法
 5. 模型 + 槽位：模型完整 ID、槽位号（禁占他人槽）；模型按项目 `.dev-flow.json` 的 `models` 对应槽位取——该槽位未配置 → 停下问用户，不静默用默认（`early` 例外：未配置则 1–3 段路由直连，不派前期工人）
 6. 回传格式 + 截止：§3 报告块落 evidence 并提交（唯一通道，不走 SendToSession）+ 超时升级条件；认领成功后第一时间回报槽位号（供会话改名）
 ```
 
-**机检前置**：`scripts/check-order.mjs <派工令路径>` 校验六字段齐备且非空，缺项退出码 1——**缺字段的派工令不开工**（无脚本的条款不进正式版，本协议不靠口头）。
+**机检前置**：`scripts/check-order.mjs <派工令路径>` 校验六字段齐备且非空，缺项退出码 1——**缺字段的派工令不开工**（无脚本的条款不进正式版，本协议不靠口头）；另对「文件地盘」缺「关联只读检查」子项给**非阻断警告**（提示补列 capability/manifest/权限配置文件，六字段语义不变、退出码仍 0）。
 
 **关键裁决同时落盘**：范围扩展、接口冲突、阶段变更等重要裁决，除发会话消息外，必须同时写进工单「## 历史」/调度台账/`decision-log.md`。消息可能未被消费或随会话丢失，落盘才是执行真相。
 
@@ -75,7 +75,8 @@ ASK: <NEED-DECISION 时一行问题>
 - **进度不转发**：路由不把进度转述给用户；只转 `NEED-DECISION` 与最终收账一行。
 - **evidence 是正常通道（原「手递降级」转正，2026-11-20 W-04 统一改版）**：不论宿主会话工具可用与否，工人完工一律把七行报告块置 `evidence/<ticket>-report.md` **头部并提交**，不再调用 `SendToSession`、不做「尽力尝试」（历史口径留档：2026-11-20 前曾要求先发消息、失败才落 evidence——cold 会话已知 `proto.sessionNotFound`；旧派工令可能仍带该措辞，以本条为准）；收账由「报告监视器 + 路由每轮开头扫」双保险兜住（见下「报告监视器」小节）。
 - **收账口径**：路由只读报告块判收账（RESULT/TESTS/REVIEW 三行定绿红），需要细节按 EVIDENCE 路径回查文件——不重新读 diff 复审（证据文件的存在性由 §9 看门狗兜底；本协议无 diff 复审环节）。03 审核通过后按 08 建环节；**收账必做项 = specs 三件套（台账/状态/追溯）+ 时记环节同步**（与三件套同批，不是可选项）：按 `state.json` 的 `taskchron` 映射（无该块时按 08 指定的 `tasks.md`/`handoff` 映射记录）定位环节——非环节最后一张收账 → `update_task` 刷新所属环节备注（已完成/总数 + 一句大白话进度，不改状态）；最后一张未收账单 → `set_task_status` 勾该环节（最后一个环节等 05/06 出口满足后再勾）；全部环节完成且最后环节出口满足后父任务收口。**新鲜度检查：最新销单时刻 > `taskchron.lastSyncedAt` 即「时记过期」，必须同步后才能收尾本轮，同步成功后写回 `lastSyncedAt`**（无时间可比不判过期）。该规则由 issue-audit 第 8 项门禁机器硬拦（**仅 `--phase final-review`＝`wt:done` 全量审计**；staged/tickets 不查）：过期直接红阻断收工，按 08 册同步后写回 `lastSyncedAt` 即转绿；`taskchron` 块/字段缺失（旧 feature）或 `taskchron.mode=off` 自动跳过，判定纯离线 git/state、不要求 MCP 可达。`taskchron` MCP 不可达时当轮声明「时记未同步」跳过，不伪写锚点，恢复后补同步。**禁止以「调度动作不入时记」为由跳过环节状态维护**——该口径只约束不建工单级条目，刷新备注/勾环节/收口是收账必做动作。归档已完成且无后续用途的工人会话（见 §12）。
-- **派工简报收尾检查**（模板 `templates/dispatch-order.md` 同款）：①完工后立即把报告块落 `evidence/<ticket>-report.md` 头部并提交（唯一通道，不调 `SendToSession`）；②关键裁决可能以会话消息形式到达（路由→工人方向）——开工初期与收尾前各读一次会话消息。
+- **派工简报收尾检查**（模板 `templates/dispatch-order.md` 同款）：①完工后立即把报告块落 `evidence/<ticket>-report.md` 头部并提交（唯一通道，不调 `SendToSession`）；②同批写 `evidence/<ticket>-retro.md`（先调 `dev-flow-retro`，文件头 `SKILL:` 行，模板 `templates/ticket-retro.md`）；③关键裁决可能以会话消息形式到达（路由→工人方向）——开工初期与收尾前各读一次会话消息。
+- **单票 retro 收账校验**：收账时同批读 `evidence/<ticket>-retro.md`，校验文件头 `SKILL: dev-flow-retro` 行——**缺失（或未调技能硬写）＝retro 未完成**，下一轮要求工人重做；**不阻塞七行报告收账**（七键语义不变，`report-ledger.mjs` 不读 retro）。工人侧必须先调 `dev-flow-retro`（原版 `retro` 是 `disable-model-invocation: true`，工人不能自动调）；宿主只能读不能调时工人写 `SKILL: dev-flow-retro(read)` 并注明原因。retro 建议的落地走 §4「收账后三路分诊」。（`watch-reports.mjs` 只按 `.md` 识别 evidence 新文件，工人单独补做 retro 也会触发一次唤醒——路由按台账幂等跳过即可，不产生坏账。）
 
 ### 报告监视器（watch-reports.mjs）——后台盯 evidence，宿主唤醒收账
 
@@ -107,6 +108,18 @@ node scripts/watch-reports.mjs --self-test    # 自带自检（临时夹具跑�
 
 **报告→台账自动化（批二）**：`scripts/report-ledger.mjs --ledger <台账> --report <报告块文件>`——校验七行必填（RESULT 枚举合法；NEED-DECISION 时 ASK 必填一行问题）、按提交号去重（须含 a–f 字符防纯数字误杀、长短前缀互认；无提交号退化为单号精确匹配；重复投递只记一次 duplicate，幂等不重复落账）、追加一行（状态映射 DONE→已完成 / NEED-DECISION→待裁决 / FAILED→失败，插在表块末尾、后文之前；单元格管道符转义、摘要列缺位或撞列不写不覆盖报告列）；失败给缺项清单（exit 1）。不改变 append-only 纪律（去重范围见 §5 归档边界），未决问题清单仍由路由手工维护。
 
+**收账后三路分诊（单票 retro 落地）**：路由收账时读 `evidence/<ticket>-retro.md` 的三分类建议，按路落账，并登记每功能一张的分诊表 `specs/<feature>/retro-triage.md`（模板 `templates/retro-triage.md`；表：单号/retro/项目级/dev-flow 级/经验卡/状态）：
+
+| 分诊 | 去向 | 边界 |
+| --- | --- | --- |
+| 项目级 | 项目 docs / 台账 / 工单模板 / 测试 / 门禁 | 改项目规则须问用户批准，不静默改 |
+| dev-flow 级 | 追加 `docs/issues/retro-candidates.md`（append-only 候选收件箱），dev-flow 维护路由评估后开 W 单并在本仓实现 | 其他项目的路由**不直接改 dev-flow 仓**，只报候选 + 证据 |
+| 通用经验卡候选 | 按项目配置查经验卡索引：`.dev-flow.json` 的 `experience.index`（解析落地前视为未配置）或项目 AGENTS/文档指针；**技能不写死「开发随记」或任何具体知识库路径** | 未配置或 `experience.mode=off` → **跳过共享卡分诊**（正常路径，不报错、不阻塞收账），候选只写项目级 `docs/dev-guide/experience.md`；已配置：先查重；跨项目两次独立命中升共享卡（派生副本不算独立项目）；纪律/红线类例外可直接进共享卡组；真用上才写 `卡:卡名` |
+
+路由每轮四块的「下一步」可带一行「本单 retro 分诊：项目 X / dev-flow W-XX / 经验卡 Y」；分诊表随批次综合评审一起看。
+
+**复盘审阅 checkpoint（retro digest，2026-11-20 用户裁决）**：每批收口（本批最后一张工单收账后）与每次公开发布前，路由必产出 `specs/<feature>/dispatch/retro-digest.md`（模板 `templates/review-digest.md`；每批覆盖更新——当前批快照，历史按台账/提交回查），三节：①**自审清单**——已自审通过、每条附理由/证据，自审边界只有四类（项目级经验记录；候选收件箱登记；有测试/自检覆盖且不改门禁语义的 dev-flow 变更；经验卡首次命中）；②**待用户拍板清单**——只列把握不了的，升级条件＝改门禁/协议核心语义、公开发布、共享卡升级、不可逆/安全敏感、或自审没把握；③**未决**——写明去向。**不得堆积**：未产出 digest 不得开下一批；digest 不允许有跨批未处理的 pending 项。
+
 ## 5. 路由上下文与成本治理
 
 **上下文阈值（超限交接）**
@@ -132,6 +145,8 @@ specs/<feature>/dispatch/          # 派工令 + 台账（路由写，工人读�
   LEDGER-archive-YYYY-MM.md        # 已关闭行归档（§5，内容不改写）
 specs/<feature>/evidence/
   <ticket>-report.md               # 回传报告（七行块头部 + 详版；唯一回传落点，§3）
+  <ticket>-retro.md                # 单票完工复盘（SKILL: 行头部；§3 收账校验 → §4 三路分诊）
+specs/<feature>/retro-triage.md    # 每功能 retro 三路分诊表（§4；模板 templates/retro-triage.md）
 specs/<feature>/state-history.json # state.json.history 旧条目归档（§5）
 ```
 

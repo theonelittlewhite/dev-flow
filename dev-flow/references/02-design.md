@@ -38,6 +38,7 @@
    - 输出（produces）
    - 错误/异常
    - 谁调用它
+   - **能力变更（触及则必列，硬项）**：新增窗口/进程/权限/数据路径、新增插件调用、修改 capability/permission manifest 时，列出能力变更清单——目标窗口/进程 × capability/permission 文件 × 所需权限（Tauri `src-tauri/capabilities/*.json`、Capacitor 插件配置、Electron preload allowlist），并给测试接缝（真实窗口标签 + 真实能力集，见 `references/11-testing.md` 真实上下文测试）。**跨窗口/跨进程新增数据访问、新增插件权限、修改 capability/permission manifest 属高风险**——评审 ≥2 路交叉或加 `security-audit`，不按普通 M 档 1 路放行（见 04 评审铁律能力面变更硬性升档）。
 4. **画数据流**：从用户操作到落盘/返回，标出每一层（UI → store → IPC → Rust/Python → 文件）。
 5. **列 NFR（六条，逐条过）**：
    - 性能：数据量、时限、内存；
@@ -67,6 +68,7 @@
 - 备选方案与取舍
 - 回滚方案
 - 每条 AC 的实现落点
+- 能力变更清单与测试接缝（触及能力面时：目标窗口/进程 × capability/permission 文件 × 所需权限；未触及写「无能力面变更」）
 - 测试接缝（在哪些公共接口测）
 
 ## 门禁
@@ -76,6 +78,7 @@
 - 如果用户说「你看着办」，记录为「设计未签字」，不许进入工单阶段（L 档必须签字；M 档可简化为一段话确认；S 档可跳过）。
 - 设计里出现 `[NEEDS CLARIFICATION]` 未清零，不许开工。
 - L 档安全触发而未跑 `security-audit`，不许进入工单阶段。
+- 设计触及能力面（新增窗口/进程/插件权限/跨窗数据访问/修改 capability·permission manifest）而未列「能力变更清单与测试接缝」→ 不许进入工单阶段；未触及须在设计里显式写「无能力面变更」。
 
 ## 常见错误
 

@@ -27,6 +27,9 @@
 | --- | --- | --- | --- | --- |
 | 1 | blocking / suggestion | ... | ... | ... |
 
+**能力影响**（必填行，缺行视为本路审核不完整）：能力影响：已核对 <capability/permission 文件清单>（结论）/ 无需变更（理由）
+> 工单触及设置读写（`getSetting`/`setSetting` 类）、`plugin-sql`/`fs`/`http`/`dialog`/`shell` 等插件调用、`invoke` 自定义命令、跨窗口事件/数据访问时，核对目标窗口/进程 capability/permission 清单（或确认对应工单「文件地盘→关联只读检查」已列出）后填写；未触及写「无需变更（理由）」。触及能力面的工单拆解须带真实上下文测试接缝（见 `references/11-testing.md`）。
+
 **覆盖声明**：查了什么 / 没查什么：...
 
 ## 审核 3：可验收性

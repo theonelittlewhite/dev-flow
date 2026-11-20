@@ -14,10 +14,14 @@
  *     进 acceptance 需 finalReviewed、进 done 需 userAccepted（--force 可越过，慎用）；
  *   - 回退限制：主线只允许回 design/tickets；retro 可回 requirements 补 AC；
  *   - 损坏 JSON：自动重建 v2 最小状态并在 history 记录；
- *   - v1 状态：原地升级 v2（补字段，不动已有值）。
+ *   - v1 状态：原地升级 v2（补字段，不动已有值）；
+ *   - 环境门禁（slot-fabric T-05，D22/D43）：新功能推进 stage≠init 需有效就绪回执
+ *     （ENV_NOT_READY，--force 不绕）；存量 stage≠init grandfather 只警告；--gate
+ *     environmentReady 是保留字（E_GATE_RESERVED，exit 2）。
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkEnvironment } from './slot/init.mjs';
 
 const STAGES = ['init', 'requirements', 'design', 'tickets', 'implement', 'final-review', 'acceptance', 'retro', 'done', 'blocked'];
 const STAGE_ORDER = ['init', 'requirements', 'design', 'tickets', 'implement', 'final-review', 'acceptance', 'retro', 'done'];
@@ -75,6 +79,12 @@ function parseArgs(argv) {
     } else if (a.startsWith('--gate')) {
       const kv = argv[++i] || '';
       const [k, v] = kv.split('=');
+      // slot-fabric T-05：environmentReady 是保留字——由回执计算（D22），不接受 --gate 赋值；
+      // 在解析期直接拒绝（先于任何 state.json 读写，fresh state 路径同样覆盖）。
+      if (k === 'environmentReady') {
+        console.error('E_GATE_RESERVED：environmentReady 是保留字（由就绪回执计算，不接受 --gate 赋值，也不写入 state.json.gates）。');
+        process.exit(2);
+      }
       if (!GATES.includes(k)) {
         console.error(`未知门禁：${k}（允许：${GATES.join(', ')}）`);
         process.exit(2);
@@ -153,6 +163,28 @@ function main() {
     }
   } else {
     state = freshState(args, args.stage);
+  }
+
+  // —— slot-fabric T-05 环境门禁（design「初始化门禁」+ D22/D43；AC-8/AC-9/AC-12）——
+  // 新功能（新建 state.json 或存量 stage=init）推进到 stage≠init 必须有有效就绪回执；
+  // 存量功能（state.json 已存在且 stage≠init）grandfather：警告 + 待补回执，不阻断；
+  // --gate environmentReady 是保留字（解析期已拒）；普通 --force 不绕过本门禁
+  // （design 门禁第 5 条：只有 doctor --mark-ready 写回执能改变就绪）。
+  const freshCreation = !fs.existsSync(file) || rebuilt;
+  const stateStage = freshCreation ? 'init' : String(state.stage ?? 'init');
+  const targetStage = args.stage ?? stateStage;
+  if (targetStage !== 'init') {
+    const grandfathered = !freshCreation && stateStage !== 'init';
+    const env = checkEnvironment(root);
+    if (!env.ready) {
+      if (grandfathered) {
+        console.error(`grandfather：存量功能（stage=${stateStage}）环境回执未就绪（${env.reason}），本次不阻断；待补回执：node dev-flow/scripts/dev-flow-slot.mjs doctor --mark-ready`);
+      } else {
+        console.error(`ENV_NOT_READY：环境回执未就绪（${env.reason}）。`);
+        console.error('先运行 dev-flow-slot init 完成项目/机器/槽位注册并写回执；--force 不绕过本门禁。');
+        process.exit(3);
+      }
+    }
   }
 
   // v1 → v2 原地升级（补字段，不动已有值）

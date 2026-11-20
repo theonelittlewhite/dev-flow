@@ -16,6 +16,9 @@
 | --- | --- | --- | --- | --- | --- |
 | 1 | blocking / suggestion | ... | ... | ... | ... |
 
+**能力影响**（必填行，缺行视为本路评审不完整）：能力影响：已核对 <capability/permission 文件清单>（结论）/ 无需变更（理由）
+> diff 触及设置读写（`getSetting`/`setSetting` 类）、`plugin-sql`/`fs`/`http`/`dialog`/`shell` 等插件调用、`invoke` 自定义命令、跨窗口事件/数据访问时，必须核对目标窗口/进程的 capability/permission 清单（Tauri `src-tauri/capabilities/*.json`、Capacitor 插件配置、Electron preload allowlist）后填写；未触及写「无需变更（理由）」。快查表见 `references/04-implement.md`。
+
 **覆盖声明**：查了什么 / 没查什么：...
 
 ## 评审 3：测试与回归
@@ -23,6 +26,9 @@
 | # | 严重级别 | 发现 | 证据 | 复现方法 | 建议 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | blocking / suggestion | ... | ... | ... | ... |
+
+**能力影响**（必填行，缺行视为本路评审不完整）：能力影响：已核对 <capability/permission 文件清单>（结论）/ 无需变更（理由）
+> 填写口径同评审 2；触及能力面（新增窗口/进程/权限/数据路径）时另须附真实上下文测试证据——真实窗口标签与真实能力集下的 E2E 或能力配置断言（见 `references/11-testing.md`），主窗口/测试窗口的 E2E 不能替代，缺则 `blocking`。
 
 **覆盖声明**：查了什么 / 没查什么：...
 
