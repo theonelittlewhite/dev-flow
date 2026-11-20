@@ -217,13 +217,15 @@ export function modelsStatus(models) {
   };
 }
 
-export function modelsLine(status) {
+export function modelsLine(status, source) {
   const detail = [
     ...status.missing,
     ...status.invalid.map(name => `${name}（非法）`),
     ...(status.workerLight === 'fallback' ? ['worker.light(回退worker.default)'] : []),
   ];
-  return `模型分工：${status.configured}/${status.total} 已配置` + (detail.length ? `（缺：${detail.join('、')}）` : '');
+  const parts = [`来源：${source || '未配置'}`];
+  if (detail.length) parts.push(`缺：${detail.join('、')}`);
+  return `模型分工：${status.configured}/${status.total} 已配置（${parts.join('；')}）`;
 }
 
 export function modelsSnippet() {
@@ -244,6 +246,116 @@ export function modelsSnippet() {
     null,
     2
   );
+}
+
+// —— 机器本地模型配置（W-08）——
+// ~/.dev-flow/models.json（Windows %USERPROFILE%\.dev-flow\models.json），不进任何仓库；
+// 形状 {"models": {...9 槽位，同项目 .dev-flow.json}}，逐槽位优先于项目配置。
+// 测试/嵌入用 DEV_FLOW_HOME 覆盖 home，避免读写真实 ~。
+export function machineModelsPath(home) {
+  return path.join(home || process.env.DEV_FLOW_HOME || os.homedir(), '.dev-flow', 'models.json');
+}
+
+export function readMachineModels(home) {
+  const file = machineModelsPath(home);
+  if (!exists(file)) return { state: 'absent', path: file, error: null, models: normalizeModels(null) };
+  let raw;
+  try {
+    raw = readJson(file);
+  } catch (error) {
+    return { state: 'invalid', path: file, error: `JSON 无法解析：${error.message}`, models: normalizeModels(null) };
+  }
+  if (!isObject(raw)) {
+    return { state: 'invalid', path: file, error: '顶层必须是对象（{"models":{…}}）', models: normalizeModels(null) };
+  }
+  if (raw.models !== null && raw.models !== undefined && !isObject(raw.models)) {
+    return {
+      state: 'invalid',
+      path: file,
+      error: '"models" 必须是对象（同项目 .dev-flow.json 的 models 块）',
+      models: normalizeModels(null),
+    };
+  }
+  return { state: 'ok', path: file, error: null, models: normalizeModels(raw.models ?? null) };
+}
+
+// 逐槽位合并：机器 normalize 后非 null 即取机器（含非法形状值——显式标非法，不静默回退项目），
+// 否则取项目，否则未配置。worker 整块形状非法视作机器/项目占住 worker 全槽位。
+export function mergeModels(machine, project) {
+  const m = isObject(machine) ? machine : {};
+  const p = isObject(project) ? project : {};
+  const merged = normalizeModels(null);
+  const sources = {};
+  const isSet = value => value !== null && value !== undefined;
+  const pick = (slot, mv, pv) => {
+    if (isSet(mv)) {
+      merged[slot] = clone(mv);
+      sources[slot] = '机器本地';
+    } else if (isSet(pv)) {
+      merged[slot] = clone(pv);
+      sources[slot] = '项目';
+    } else {
+      sources[slot] = '未配置';
+    }
+  };
+  for (const slot of ['router', 'early', 'ticketReview', 'ticketJudge', 'inspector', 'finalReview', 'finalJudge', 'offpeak']) {
+    pick(slot, m[slot], p[slot]);
+  }
+  const mWorker = m.worker;
+  const pWorker = p.worker;
+  const mWorkerObj = isObject(mWorker);
+  const pWorkerObj = isObject(pWorker);
+  if (isSet(mWorker) && !mWorkerObj) {
+    merged.worker = clone(mWorker); // 机器 worker 整块非法：整体获胜并显式标出
+    sources['worker.default'] = '机器本地';
+    sources['worker.light'] = '机器本地';
+  } else if (!isSet(mWorker) && isSet(pWorker) && !pWorkerObj) {
+    merged.worker = clone(pWorker); // 仅项目 worker 整块非法：保留并显式标出
+    sources['worker.default'] = '项目';
+    sources['worker.light'] = '项目';
+  } else {
+    const mW = mWorkerObj ? mWorker : {};
+    const pW = pWorkerObj ? pWorker : {};
+    // worker 子槽写入必须落在 merged.worker.<key> 上，不能造 'worker.default' 字面量键
+    const pickSub = (key, mv, pv) => {
+      if (isSet(mv)) {
+        merged.worker[key] = clone(mv);
+        sources[`worker.${key}`] = '机器本地';
+      } else if (isSet(pv)) {
+        merged.worker[key] = clone(pv);
+        sources[`worker.${key}`] = '项目';
+      } else {
+        merged.worker[key] = null;
+        sources[`worker.${key}`] = '未配置';
+      }
+    };
+    pickSub('default', mW.default, pW.default);
+    pickSub('light', mW.light, pW.light);
+    for (const [key, value] of Object.entries(mW)) {
+      if (!(key in merged.worker)) merged.worker[key] = clone(value); // worker 内未知子键：机器优先
+    }
+    for (const [key, value] of Object.entries(pW)) {
+      if (!(key in merged.worker) && !(key in mW)) merged.worker[key] = clone(value);
+    }
+  }
+  // 未知槽位：机器优先，项目补缺（循环顺序即优先级：先机器后项目）
+  for (const [key, value] of Object.entries(m)) {
+    if (!(key in merged)) merged[key] = clone(value);
+  }
+  for (const [key, value] of Object.entries(p)) {
+    if (!(key in merged)) merged[key] = clone(value);
+  }
+  return { models: merged, sources };
+}
+
+// 整体来源（四态）：9 个计数槽位中「已配置（ok 态）」槽位的来源全同 → 该来源；
+// 机器/项目混合 → 机器本地+项目；一个都没配 → 未配置。
+export function modelsOverallSource(status, sources) {
+  const counted = ['router', 'early', 'ticketReview', 'ticketJudge', 'inspector', 'finalReview', 'finalJudge', 'offpeak', 'worker.default'];
+  const effective = counted.filter(slot => !status.missing.includes(slot) && !status.invalid.includes(slot));
+  if (effective.length === 0) return '未配置';
+  const distinct = new Set(effective.map(slot => sources[slot]).filter(Boolean));
+  return distinct.size === 1 ? [...distinct][0] : '机器本地+项目';
 }
 
 function readJson(file) {
@@ -790,7 +902,6 @@ function projectInit(opts) {
   //     init 是新功能回执唯一写者）等「别人的键」不参与比对，写入时原样保留；
   //   - profile 键在文件里缺失 = 纯增量 → 直接合并写入，不需要 --force；
   //   - profile 键已存在且值不同 = 冲突 → 不加 --force 拒绝（防误覆盖）。
-  const modelsOf = existing => modelsStatus(normalizeModels(isObject(existing) ? existing.models : null));
   // slot-fabric T-05：环境探测委托（spec「探测、项目初始化」）——setup 不写 environment/回执，
   // 只经同仓 dev-flow 技能的 doctor 只读探测现状并给委托命令。
   const environment = probeEnvironment(root);
@@ -802,6 +913,23 @@ function projectInit(opts) {
       fail(`现有 ${file} 无法解析：${error.message}`);
     }
   }
+  // W-08：models 状态按「机器本地 > 项目 > 未配置」逐槽位合并后的生效视图输出；
+  // 机器文件损坏/形状非法 → machineFile.state=invalid + 修复提示，不静默回退项目。
+  const machine = readMachineModels();
+  const { models: mergedModels, sources } = mergeModels(
+    machine.models,
+    normalizeModels(isObject(existing) ? existing.models : null)
+  );
+  const mergedStatus = modelsStatus(mergedModels);
+  const models = {
+    ...mergedStatus,
+    normalized: mergedModels,
+    source: modelsOverallSource(mergedStatus, sources),
+    sources,
+    machineFile: machine.error
+      ? { state: machine.state, path: machine.path, error: machine.error }
+      : { state: machine.state, path: machine.path },
+  };
   const ownedMissingOrDiffers = Object.keys(profile).filter(
     key => !(key in (existing ?? {})) || JSON.stringify(existing[key]) !== JSON.stringify(profile[key])
   );
@@ -822,7 +950,7 @@ function projectInit(opts) {
     created: existing === null && !opts.dryRun,
     dryRun: opts.dryRun,
     profile,
-    models: modelsOf(existing),
+    models,
     environment,
   };
 }
@@ -871,8 +999,14 @@ function printHuman(result) {
     console.log(`模式：${result.dryRun ? 'dry-run（未写盘）' : result.created ? '已写入' : '已存在且一致'}`);
     console.log(JSON.stringify(result.profile, null, 2));
     const models = result.models;
+    if (models?.machineFile?.state === 'invalid') {
+      // W-08：机器文件损坏/形状非法 → 明确标非法 + 可执行修复提示，不静默回退项目
+      console.log(`【机器本地模型配置非法】${models.machineFile.path}`);
+      console.log(`  原因：${models.machineFile.error}`);
+      console.log('  修复：改为 {"models":{…}}（9 槽位同项目 .dev-flow.json 的 models 块）；修复前按项目配置显示，不静默合并。');
+    }
     if (models?.reminder) {
-      console.log(`【缺模型配置】${modelsLine(models)}`);
+      console.log(`【缺模型配置】${modelsLine(models, models.source)}`);
       if (models.invalid.length) {
         console.log(`  非法配置（须补齐，不静默补默认）：${models.invalid.join('、')}`);
       }
@@ -880,6 +1014,8 @@ function printHuman(result) {
       console.log('  ticketReview/finalReview 数组给 1 项=三路同型号、3 项=逐路指定，2 项非法）：');
       for (const line of modelsSnippet().split('\n')) console.log(`  ${line}`);
       console.log('  未配置时 dev-flow 会在对应环节停下问你，不静默用默认。');
+      console.log('  机器本地优先：也可写进 ~/.dev-flow/models.json（顶层 {"models":{…}}，逐槽位优先于项目，');
+      console.log('  不进任何仓库；测试/嵌入用 DEV_FLOW_HOME 隔离 home）。');
     }
     // slot-fabric T-05：环境就绪回执探测（委托只读，setup 不写 environment/回执）
     const envProbe = result.environment;

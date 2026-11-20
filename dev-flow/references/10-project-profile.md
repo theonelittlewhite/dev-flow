@@ -101,6 +101,24 @@ dev-flow 本身跨项目通用；项目差异（词汇表、台账命令、chang
 - **`audit.designDocGlobs`**：`issue-audit.mjs` 判定「销单提交是否触碰代码」时的显式白名单。`docs/design/**/*.yaml|yml`（覆盖表等设计文档）默认放行；项目设计目录不在 `docs/design` 时同步改这里。`allowNonCodeGlobs` 用于其他项目特有非代码文件；**不要**用散落特判绕过机检。
 - **`models` 块**：缺失块 / 槽位 `null` / 空数组一律视为「未配置」；未配置的槽位在对应环节**停下问用户，不猜默认**——唯一例外是 `early`：未配置不停下问，1–3 段直接退回路由直连的旧行为。`worker.light` 未配置回退 `worker.default` 并在提醒里列出；`ticketReview`/`finalReview` 数组 2 项视为配置非法，提醒补齐，不静默补默认。模型 ID 形如 `provider/model`，宿主相关——脚本只检查字段形状，不做在线可用性校验；真正派工时宿主报错即回问用户。无 `models` 块的旧项目继续按旧行为跑，只在 `--project-init` 与 `flow-status` 输出提醒。`--project-init` 的一致性比对忽略 `models` 块（该块不由 setup 生成/维护）。
 
+## 机器本地模型配置（`~/.dev-flow/models.json`）
+
+模型分工支持机器级配置：`~/.dev-flow/models.json`（Windows `%USERPROFILE%\.dev-flow\models.json`），**不进任何仓库**——家里/办公两套机器各自指定模型 ID，项目仓不用改。
+
+**形状**：顶层只读 `models` 键，9 个槽位同项目 `.dev-flow.json` 的 `models` 块：
+
+```json
+{ "models": { "router": "<model-id>", "worker": { "default": "<model-id>", "light": "<model-id>" } } }
+```
+
+**优先级（逐槽位合并）**：机器本地已配置的槽位 > 项目 `.dev-flow.json` 的 `models` > 未配置。`worker.light` 仍可回退 `worker.default`（可跨源：机器配 `default`、项目配 `light` 也算配齐）。数组 1/3 项、2 项非法等形状规则与项目一致；机器槽位写了非法形状值时该槽位按「非法」标出，**不静默回退项目**。
+
+**损坏/形状非法**：文件存在但 JSON 损坏、顶层不是对象、`models` 不是对象 → 明确标非法并给可执行修复提示；修复前按项目配置显示（显式提示，非静默回退）。文件不存在 → 正常用项目配置。
+
+**来源显示**：`flow-status` 模型分工行显示来源——`机器本地` / `项目` / `机器本地+项目` / `未配置`；整体来源按 9 个计数槽位判定（`worker.light` 不参与——它不计入 9 槽位，机器只配 `light` 时整体按其余槽位显示）。`--json` 增 `models.source`（整体四态）、`models.sources`（逐槽位）、`models.machineFile`（`state: ok|absent|invalid` + `path`/`error`），既有输出形状不变（新增字段）。`setup --project-init` 的 `--json` 同样带这三个字段；缺模型配置提醒指向 `~/.dev-flow/models.json` 并说明优先于项目；机器文件损坏时给修复提示。`--project-init` 仍不生成/维护 `models` 块（项目块与机器文件都由用户/路由维护，边界不变）。
+
+**测试/嵌入**：用环境变量 `DEV_FLOW_HOME` 覆盖 home，测试即不读写真实 `~`。注意它**只影响机器模型文件的路径解析**——slot 环境门禁、安装技能根等仍读真实 `~`/`HOME`/`USERPROFILE`；同时钉 `HOME`/`USERPROFILE`/`DEV_FLOW_HOME` 才是完整隔离。
+
 ## 生成
 
 在项目根：

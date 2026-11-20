@@ -14,6 +14,7 @@
  * Exit codes: 0 ok, 1 no state found, 2 ambiguous/invalid, 3 corrupt (with rebuild hint).
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const STAGES = ['init', 'requirements', 'design', 'tickets', 'implement', 'final-review', 'acceptance', 'retro', 'done', 'blocked'];
@@ -184,13 +185,128 @@ function modelsStatus(models) {
   return { configured, total: 9, missing, invalid, workerLight };
 }
 
-function modelsLine(status) {
+function modelsLine(status, source) {
   const detail = [
     ...status.missing,
     ...status.invalid.map(name => `${name}（非法）`),
     ...(status.workerLight === 'fallback' ? ['worker.light(回退worker.default)'] : []),
   ];
-  return `模型分工：${status.configured}/${status.total} 已配置` + (detail.length ? `（缺：${detail.join('、')}）` : '');
+  const parts = [`来源：${source || '未配置'}`];
+  if (detail.length) parts.push(`缺：${detail.join('、')}`);
+  return `模型分工：${status.configured}/${status.total} 已配置（${parts.join('；')}）`;
+}
+
+// —— 机器本地模型配置（W-08）——与 dev-flow-setup/scripts/setup.mjs 同语义（两技能独立安装
+// 不跨技能 import，改动须两边同步）：~/.dev-flow/models.json 逐槽位优先于项目；文件损坏/
+// 形状非法 → state=invalid + 原因，显式标出不静默回退项目；测试/嵌入用 DEV_FLOW_HOME 隔离 home。
+function machineModelsPath(home) {
+  return path.join(home || process.env.DEV_FLOW_HOME || os.homedir(), '.dev-flow', 'models.json');
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readMachineModels(home) {
+  const file = machineModelsPath(home);
+  if (!fs.existsSync(file)) return { state: 'absent', path: file, error: null, models: normalizeModels(null) };
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { state: 'invalid', path: file, error: `JSON 无法解析：${error.message}`, models: normalizeModels(null) };
+  }
+  if (!isPlainObject(raw)) {
+    return { state: 'invalid', path: file, error: '顶层必须是对象（{"models":{…}}）', models: normalizeModels(null) };
+  }
+  if (raw.models !== null && raw.models !== undefined && !isPlainObject(raw.models)) {
+    return {
+      state: 'invalid',
+      path: file,
+      error: '"models" 必须是对象（同项目 .dev-flow.json 的 models 块）',
+      models: normalizeModels(null),
+    };
+  }
+  return { state: 'ok', path: file, error: null, models: normalizeModels(raw.models ?? null) };
+}
+
+// 逐槽位合并：机器 normalize 后非 null 即取机器（含非法形状值——显式标非法，不静默回退项目），
+// 否则取项目，否则未配置。worker 整块形状非法视作机器/项目占住 worker 全槽位。
+function mergeModels(machine, project) {
+  const m = isPlainObject(machine) ? machine : {};
+  const p = isPlainObject(project) ? project : {};
+  const merged = normalizeModels(null);
+  const sources = {};
+  const isSet = value => value !== null && value !== undefined;
+  const pick = (slot, mv, pv) => {
+    if (isSet(mv)) {
+      merged[slot] = JSON.parse(JSON.stringify(mv));
+      sources[slot] = '机器本地';
+    } else if (isSet(pv)) {
+      merged[slot] = JSON.parse(JSON.stringify(pv));
+      sources[slot] = '项目';
+    } else {
+      sources[slot] = '未配置';
+    }
+  };
+  for (const slot of ['router', 'early', 'ticketReview', 'ticketJudge', 'inspector', 'finalReview', 'finalJudge', 'offpeak']) {
+    pick(slot, m[slot], p[slot]);
+  }
+  const mWorker = m.worker;
+  const pWorker = p.worker;
+  const mWorkerObj = isPlainObject(mWorker);
+  const pWorkerObj = isPlainObject(pWorker);
+  if (isSet(mWorker) && !mWorkerObj) {
+    merged.worker = JSON.parse(JSON.stringify(mWorker)); // 机器 worker 整块非法：整体获胜并显式标出
+    sources['worker.default'] = '机器本地';
+    sources['worker.light'] = '机器本地';
+  } else if (!isSet(mWorker) && isSet(pWorker) && !pWorkerObj) {
+    merged.worker = JSON.parse(JSON.stringify(pWorker)); // 仅项目 worker 整块非法：保留并显式标出
+    sources['worker.default'] = '项目';
+    sources['worker.light'] = '项目';
+  } else {
+    const mW = mWorkerObj ? mWorker : {};
+    const pW = pWorkerObj ? pWorker : {};
+    // worker 子槽写入必须落在 merged.worker.<key> 上，不能造 'worker.default' 字面量键
+    const pickSub = (key, mv, pv) => {
+      if (isSet(mv)) {
+        merged.worker[key] = JSON.parse(JSON.stringify(mv));
+        sources[`worker.${key}`] = '机器本地';
+      } else if (isSet(pv)) {
+        merged.worker[key] = JSON.parse(JSON.stringify(pv));
+        sources[`worker.${key}`] = '项目';
+      } else {
+        merged.worker[key] = null;
+        sources[`worker.${key}`] = '未配置';
+      }
+    };
+    pickSub('default', mW.default, pW.default);
+    pickSub('light', mW.light, pW.light);
+    for (const [key, value] of Object.entries(mW)) {
+      if (!(key in merged.worker)) merged.worker[key] = JSON.parse(JSON.stringify(value)); // 未知子键：机器优先
+    }
+    for (const [key, value] of Object.entries(pW)) {
+      if (!(key in merged.worker) && !(key in mW)) merged.worker[key] = JSON.parse(JSON.stringify(value));
+    }
+  }
+  // 未知槽位：机器优先，项目补缺（循环顺序即优先级：先机器后项目）
+  for (const [key, value] of Object.entries(m)) {
+    if (!(key in merged)) merged[key] = JSON.parse(JSON.stringify(value));
+  }
+  for (const [key, value] of Object.entries(p)) {
+    if (!(key in merged)) merged[key] = JSON.parse(JSON.stringify(value));
+  }
+  return { models: merged, sources };
+}
+
+// 整体来源（四态）：9 个计数槽位中「已配置（ok 态）」槽位的来源全同 → 该来源；
+// 机器/项目混合 → 机器本地+项目；一个都没配 → 未配置。
+function modelsOverallSource(status, sources) {
+  const counted = ['router', 'early', 'ticketReview', 'ticketJudge', 'inspector', 'finalReview', 'finalJudge', 'offpeak', 'worker.default'];
+  const effective = counted.filter(slot => !status.missing.includes(slot) && !status.invalid.includes(slot));
+  if (effective.length === 0) return '未配置';
+  const distinct = new Set(effective.map(slot => sources[slot]).filter(Boolean));
+  return distinct.size === 1 ? [...distinct][0] : '机器本地+项目';
 }
 
 function readModels(root) {
@@ -200,8 +316,19 @@ function readModels(root) {
   } catch {
     raw = null; // 无配置/配置损坏按「未配置 models」处理，flow-status 本身不因此报错
   }
-  const normalized = normalizeModels(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw.models : null);
-  return { status: modelsStatus(normalized), normalized };
+  const project = normalizeModels(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw.models : null);
+  const machine = readMachineModels();
+  const { models, sources } = mergeModels(machine.models, project);
+  const status = modelsStatus(models);
+  return {
+    status,
+    normalized: models,
+    source: modelsOverallSource(status, sources),
+    sources,
+    machineFile: machine.error
+      ? { state: machine.state, path: machine.path, error: machine.error }
+      : { state: machine.state, path: machine.path },
+  };
 }
 
 function normalizeIssueStatus(raw) {
@@ -312,6 +439,10 @@ async function main() {
   for (const c of conflicts) warnings.push(`模块重叠：与功能 ${c.feature}（${c.stage}）重叠 [${c.modules.join('、')}]，先排序/协调再动工`);
 
   const models = readModels(root);
+  // W-08：机器本地模型文件损坏/形状非法 → 警告显式标出，修复前按项目配置显示，不静默合并
+  if (models.machineFile.state === 'invalid') {
+    warnings.push(`机器本地模型文件非法：${models.machineFile.path}（${models.machineFile.error}）；修复前按项目配置显示，不静默合并`);
+  }
   // slot-fabric T-05：环境摘要——从就绪回执计算（D22：不存 state，只读展示，不参与门禁判定）；
   // poolWarm=false 时标注「预热中」（允许开工，design「配置分层与就绪回执」）。
   // W-13：懒加载 slot/init.mjs——公开包只发技能层、不含 scripts/slot/**，顶层静态 import 会让
@@ -369,7 +500,7 @@ async function main() {
     : environment.ready
       ? `环境：就绪（${environment.projectId} @ ${environment.machineId}${environment.poolWarm ? '' : '，预热中'}）`
       : `环境：未就绪（${environment.reason}：${environment.detail}）`);
-  console.log(modelsLine(models.status));
+  console.log(modelsLine(models.status, models.source));
   if ((state.affectedModules || []).length) console.log(`受影响模块：${state.affectedModules.join('、')}`);
   if ((state.dependsOnFeatures || []).length) console.log(`依赖功能：${state.dependsOnFeatures.join('、')}`);
   if (warnings.length) console.log(`警告：${warnings.join('；')}`);

@@ -74,7 +74,8 @@ description: 开发流程单一入口：任何项目、任何阶段，调用它�
 
 - **有会话工具**且 4–6 段有一批可并行工单 → **路由编排**（04 形态 B 的协议化）：一个路由会话派工收账，N 个工人会话施工；派工令六字段/回传报告块（工人完工只落 `evidence/<ticket>-report.md` 并提交；`SendToSession` 只用于路由→工人发命令/提醒，不作工人回传）/调度台账/上下文治理见 `references/09-conductor.md`，派工令先过 `scripts/check-order.mjs` 机检；工人完工收账后，无后续用途的会话及时归档（09 §12）。
 - **没有会话工具** → 单会话 SDD（04 形态 A）；报告块七行改作会话内交付汇报小节标题沿用，协议不失效（降级细则见 09 §8）。
-- 1–3 段（需求/设计/工单）：**未配置 `models.early` 时（含无 `models` 块的旧项目）路由与用户直接对齐，不派工人**；项目 `.dev-flow.json` 存在 `models.early` 时改为派**前期工人**执行这三段——路由只做转发消息/派活/监控，模型取 `models.early` 槽位；形态 C（用户亲写）不经会话编排，不走本决策（三形态全表见 04；派工取模规则见 `references/09-conductor.md` §1）。
+- 1–3 段（需求/设计/工单）：**未配置 `models.early` 时（含无 `models` 块的旧项目）路由与用户直接对齐，不派工人**；项目 `.dev-flow.json` 存在 `models.early` 时，**设计/工单**可派**前期工人**执行；**需求阶段用户在环**——小需求路由内 grilling，大需求可派**用户直连前期工人**（用户在会话内直接对，路由只派发/监控/收账，不被阻塞；工人不得替用户拍板）；路由只做转发消息/派活/监控，模型取 `models.early` 槽位；形态 C（用户亲写）不经会话编排，不走本决策（三形态全表见 04；派工取模规则见 `references/09-conductor.md` §1）。
+- **1–3 段参与矩阵（2026-11-20 用户裁决）**：需求 = 用户在环持续对齐（`dev-flow-grill-with-docs`，L 档强制；路由内或用户直连前期工人）；设计 = `writing-plans` + `plan-review` 出稿，用户最后签一次字；工单 = `dev-flow-to-tickets` + 3 路审核 + 裁判 + `issue-audit`，用户不参与、可抽查。**前期工人 brief 必须点名阶段技能；未点名不得派。** 实现/评审工人仍不直接向用户提问，疑问回 `NEED-DECISION`；用户直连仅用于需求/设计要求。
 
 ## 风险分档
 
@@ -181,6 +182,8 @@ specs/<feature>/
 | `models.*` | 模型分工：每个环节用哪个模型（`router`/`early`/`ticketReview`/`ticketJudge`/`worker.default`/`worker.light`/`inspector`/`finalReview`/`finalJudge`/`offpeak`） | 无 `models` 块 = 未配置：对应环节**停下问用户，不静默用默认**（`early` 未配置则 1–3 段退回路由直连；旧项目无块按旧行为跑，`--project-init` 与 `flow-status` 会提醒）。schema 见 `references/10-project-profile.md` |
 
 生成：`node ~/.zcode/skills/dev-flow-setup/scripts/setup.mjs --project-init --root <项目根> --dry-run`（先看探测结果，再去掉 `--dry-run` 落盘）。完整 schema 与示例见 `references/10-project-profile.md`。
+
+**机器本地模型配置（优先于项目）**：`~/.dev-flow/models.json`（形状同项目 `models` 块，不进仓库）逐槽位优先于项目 `.dev-flow.json`——家里/办公两套机器 ID 分开时项目仓不用改；`flow-status` 模型分工行显示来源（机器本地/项目/机器本地+项目/未配置），机器文件损坏标非法不静默回退；测试/嵌入用 `DEV_FLOW_HOME` 隔离 home。
 
 ## 时记同步（可选，驾驶舱，单向）
 
